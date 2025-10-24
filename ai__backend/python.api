@@ -1,0 +1,256 @@
+
+# To run this code you need to install the following dependencies:
+# pip install google-genai flask pillow
+
+import base64
+import mimetypes
+import os
+import time
+from google import genai
+from google.genai import types
+from google.genai.errors import ServerError
+from PIL import Image
+from io import BytesIO
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+def save_binary_file(file_name, data):
+    f = open(file_name, "wb")
+    f.write(data)
+    f.close()
+    print(f"File saved to to: {file_name}")
+
+def call_generate_stream_with_retries(client, model, contents, config, max_attempts=3, initial_backoff=1.0):
+    """
+    Call the client's generate_content_stream with simple retries on ServerError.
+    Returns an iterator (the stream) or raises the last exception.
+    """
+    backoff = initial_backoff
+    last_exc = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            print(f"[genai] Attempt {attempt} calling generate_content_stream (model={model})")
+            return client.models.generate_content_stream(
+                model=model,
+                contents=contents,
+                config=config,
+            )
+        except ServerError as e:
+            last_exc = e
+            print(f"[genai] ServerError on attempt {attempt}: {e}. Backing off {backoff}s before retry.")
+            # print any available detail if present
+            try:
+                print(f"[genai] server error repr: {repr(e)}")
+            except Exception:
+                pass
+            if attempt == max_attempts:
+                print("[genai] Max retries reached; re-raising exception.")
+                raise
+            time.sleep(backoff)
+            backoff *= 2.0
+        except Exception as e:
+            # Non-ServerError exceptions: log and re-raise (we don't silently retry on unexpected exceptions)
+            print(f"[genai] Unexpected exception while calling generate_content_stream: {e}")
+            raise
+
+
+def generate_image_from_prompt(prompt, input_image):
+    """
+    Generate image directly from prompt and input image.
+    - Adds retries for ServerError during streaming.
+    - Adds a non-stream fallback if streaming returns no image.
+    """
+    import time
+    from google.genai.errors import ServerError
+
+    try:
+        client = genai.Client(api_key="AIzaSyDQ_IImJ2MNZ-IgI9dm35PZwXWDEFBW76g")
+
+        print(f"🎨 Generating image with prompt: {prompt[:100]}...")
+        print(f"📸 Input image size: {input_image.size}")
+
+        # Convert PIL image to bytes for Gemini
+        img_byte_arr = BytesIO()
+        input_image.save(img_byte_arr, format='JPEG')
+        img_bytes = img_byte_arr.getvalue()
+
+        # Create image part for Gemini
+        image_part = types.Part(
+            inline_data=types.Blob(
+                data=img_bytes,
+                mime_type="image/jpeg"
+            )
+        )
+
+        # Generate image directly from prompt and input image
+        model = "gemini-2.5-flash-image-preview"
+        contents = [
+            types.Content(
+                role="user",
+                parts=[
+                    image_part,  # The child's image as proper Part object
+                    types.Part.from_text(text=prompt),  # Your custom prompt
+                ],
+            ),
+        ]
+
+        generate_content_config = types.GenerateContentConfig(
+            response_modalities=["IMAGE"],  # Only generate images, no text
+        )
+
+        def call_stream_with_retries(max_attempts=3):
+            backoff = 1.0
+            last_exc = None
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    print(f"[genai] Attempt {attempt} calling generate_content_stream (model={model})")
+                    return client.models.generate_content_stream(
+                        model=model,
+                        contents=contents,
+                        config=generate_content_config,
+                    )
+                except ServerError as e:
+                    print(f"[genai] ServerError on attempt {attempt}: {e}")
+                    last_exc = e
+                    if attempt == max_attempts:
+                        break
+                    time.sleep(backoff)
+                    backoff *= 2.0
+            if last_exc:
+                raise last_exc
+            return None
+
+        # Try streaming with retries
+        generated_image_data = None
+        try:
+            stream_iter = call_stream_with_retries(max_attempts=3)
+            if stream_iter is not None:
+                for chunk in stream_iter:
+                    # log chunk structure for debugging
+                    try:
+                        cand = chunk.candidates[0] if chunk.candidates else None
+                        if cand and cand.content and cand.content.parts:
+                            print(f"[genai] Received chunk with {len(cand.content.parts)} part(s)")
+                        else:
+                            # chunk without usable parts
+                            print("[genai] Received chunk with no content.parts")
+                    except Exception:
+                        print("[genai] Error inspecting chunk metadata")
+
+                    if (
+                        chunk.candidates is None
+                        or chunk.candidates[0].content is None
+                        or chunk.candidates[0].content.parts is None
+                    ):
+                        continue
+
+                    for part in chunk.candidates[0].content.parts:
+                        # if inline_data is present, use it
+                        if getattr(part, "inline_data", None) and getattr(part.inline_data, "data", None):
+                            generated_image_data = part.inline_data.data
+                            print(f"✅ Generated image: {len(generated_image_data)} bytes")
+                            return generated_image_data
+                        elif getattr(part, "text", None):
+                            txt = part.text
+                            print(f"📝 Text part (ignoring): {txt[:120]}{'...' if len(txt)>120 else ''}")
+        except ServerError as e:
+            print(f"[genai] Streaming failed after retries: {e}")
+        except Exception as e:
+            print(f"[genai] Unexpected error while streaming: {e}")
+            import traceback; traceback.print_exc()
+
+        # If streaming did not return image data, try a non-stream fallback once
+        try:
+            print("[genai] Streaming returned no image — attempting non-stream fallback (generate_content)")
+            resp = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=generate_content_config,
+            )
+            # resp may contain candidates -> content -> parts
+            if getattr(resp, "candidates", None):
+                for cand in resp.candidates:
+                    if getattr(cand, "content", None) and getattr(cand.content, "parts", None):
+                        for part in cand.content.parts:
+                            if getattr(part, "inline_data", None) and getattr(part.inline_data, "data", None):
+                                generated_image_data = part.inline_data.data
+                                print(f"✅ Fallback generated image: {len(generated_image_data)} bytes")
+                                return generated_image_data
+                            elif getattr(part, "text", None):
+                                print(f"📝 Fallback text part (ignoring): {part.text[:120]}{'...' if len(part.text)>120 else ''}")
+        except Exception as e:
+            print(f"[genai] Fallback generate_content failed: {e}")
+            import traceback; traceback.print_exc()
+
+        print("❌ No image data found in response (stream + fallback)")
+        return None
+
+    except Exception as e:
+        print(f"💥 Error in generate_image_from_prompt: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+@app.route('/generate-image', methods=['POST'])
+def generate_image_api():
+    """
+    API endpoint that accepts prompt and base64 encoded image
+    Returns base64 encoded generated image
+    """
+    try:
+        # Get JSON data from request
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        # Extract parameters
+        prompt = data.get('prompt')
+        image_base64 = data.get('image')
+        
+        if not prompt:
+            return jsonify({"error": "prompt parameter is required"}), 400
+        
+        if not image_base64:
+            return jsonify({"error": "image parameter is required"}), 400
+        
+        # Decode base64 image
+        try:
+            image_data = base64.b64decode(image_base64)
+            input_image = Image.open(BytesIO(image_data))
+        except Exception as e:
+            return jsonify({"error": f"Invalid base64 image data: {str(e)}"}), 400
+        
+        # Generate image using existing logic
+        print("🎨 Starting image generation...")
+        generated_image_data = generate_image_from_prompt(prompt, input_image)
+        
+        if generated_image_data is None:
+            print("❌ Image generation returned None")
+            return jsonify({"error": "Failed to generate image - no image data returned"}), 500
+        
+        # Convert generated image to base64
+        generated_image_base64 = base64.b64encode(generated_image_data).decode('utf-8')
+        
+        # Return response
+        return jsonify({
+            "success": True,
+            "generated_image": generated_image_base64,
+            "message": "Image generated successfully"
+        })
+        
+    except Exception as e:
+        print(f"💥 API Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({"status": "healthy", "message": "API is running"})
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)

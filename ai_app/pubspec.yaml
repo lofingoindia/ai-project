@@ -1,0 +1,79 @@
+name: ai_project_app
+description: "A new Flutter project."
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  supabase_flutter: ^2.5.1
+  image_picker: ^1.0.4
+  google_sign_in: ^6.1.5
+  flutter_facebook_auth: ^6.0.3
+  flutter_svg: ^2.0.7
+  http: ^1.5.0
+  video_player: ^2.8.2
+  chewie: ^1.7.5
+  google_fonts: ^6.1.0
+  carousel_slider: ^5.1.1
+  font_awesome_flutter: ^10.9.1
+  google_generative_ai: ^0.4.6
+  cached_network_image: ^3.3.1
+  shared_preferences: ^2.2.2
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+
+flutter:
+
+
+  uses-material-design: true
+  assets:
+    - assets/translations/
+    - assets/w copy.png
+    - assets/s1 copy.jpg
+    - assets/s2 copy.jpg
+    - assets/shuffle1 copy.jpeg
+    - assets/shuffle2 copy.jpeg
+    - assets/bn copy.png
+    - assets/11 copy.png
+    - assets/22 copy.png
+    - assets/33 copy.png
+    - assets/44444 copy.png
+    - assets/4444 copy.png
+    - assets/g copy.png
+    - assets/ggggggggg copy.png
+    - assets/E1 copy.png
+    - assets/E2 copy.png
+    - assets/E3 copy.png
+    - assets/1t copy.png
+    - assets/22t copy.png
+    - assets/3t copy.png
+    - assets/1c copy.png
+    - assets/2c copy.png
+    - assets/33c copy.png
+    - assets/google copy.png
+    - assets/Group.png
+    - assets/googleee copy.png
+    - assets/1c copy.png
+    - assets/2c copy.png
+    - assets/33c copy.png
+    - assets/pw copy.png
+    - assets/banner copy.png
+    - assets/video-preview.mp4
+    - assets/pink-gradient copy.svg
+    - assets/flags/
+    - assets/payment/
+    - assets/boyui copy.png
+    - assets/girlui copy.png
+    - assets/aibn.png
+    - assets/vd.mp4
+    - assets/logo.png
