@@ -52,7 +52,3 @@ input {
   background: var(--border-color);
   border-radius: 4px;
 }
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
-}

@@ -47,18 +47,19 @@
 }
 
 .character-tag {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #667eea;
   color: white;
   padding: 0.35rem 0.75rem;
   border-radius: 16px;
   font-size: 0.85rem;
   font-weight: 500;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-color, #e0e0e0);
+}
 }
 
 /* Genre badge styling */
 .genre-badge {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  background: #f5576c;
   color: white;
   padding: 0.4rem 1rem;
   border-radius: 20px;
@@ -149,7 +150,7 @@ body.dark-mode .character-tag,
 body.dark-mode .genre-badge,
 body.dark-mode .age-range-badge,
 body.dark-mode .ideal-for-badge {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 body.dark-mode .product-metadata-section {
